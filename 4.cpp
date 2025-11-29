@@ -8,6 +8,7 @@
 #include <sstream>
 #include <chrono> // 計時 微秒
 #include <iomanip>
+#include <algorithm> // for std::max
 
 
 using namespace std::chrono;
@@ -355,29 +356,35 @@ void processChefUntil(int chefId, int limitTime,
                       std::vector<Timeout> &timeoutList) {
   // chefId: 0-based，實際 CID = chefId + 1
   while (!q.empty() && idleTime <= limitTime) {
+    // 先取出佇列最前面的訂單
     Order cur;
     q.pop(cur);
 
-    // 取出時就逾時 -> 取消，寫入 Abort List
-    if (cur.timeout < idleTime) {
-      int delay = idleTime - cur.arrival;  // Abort - Arrival
-      abortList.push_back({cur.OID, chefId + 1, delay, idleTime});
+    // 真正開始處理這筆訂單的時間：
+    // 不能早於廚師目前的閒置時刻，也不能早於訂單的到達時刻
+    int startTime = std::max(idleTime, cur.arrival);
+
+    // 取出時就發現已經逾時：Timeout < 取出時刻(startTime)
+    if (cur.timeout < startTime) {
+      int delay = startTime - cur.arrival;  // Abort - Arrival
+      abortList.push_back({cur.OID, chefId + 1, delay, startTime});
+      idleTime = startTime;                 // 廚師時間跳到這個取消時刻
       continue;
     }
 
-    // 開始製作
-    int startTime = idleTime;
+    // 可以開始做，計算完成時間
     int finishTime = startTime + cur.duration;
-    idleTime = finishTime;
+    idleTime = finishTime;   // 廚師完成這道菜的時刻
 
-    // 做完才發現逾時 -> 寫入 Timeout List
+    // 做完才發現逾時：Timeout < 完成時刻
     if (cur.timeout < finishTime) {
       int delay = startTime - cur.arrival;  // 取出時刻 - Arrival
       timeoutList.push_back({cur.OID, chefId + 1, delay, finishTime});
     }
-    // 未逾時 -> 只更新 idleTime，不記錄
+    // 沒逾時：只更新 idleTime，不需記錄
   }
 }
+
 
 void SimulateMultiQueues(Order* arr, int n, int N,
                          const std::string& prefix,
@@ -642,7 +649,9 @@ int main() {
     else if (command == 3) {
       // 任務三：一定要先有任務二載入過資料
       if (!file_loaded) {
-        std::cout << "\n### Please run command 2 first! ###\n";
+        std::cout << "\n### sorted" 
+              << (loaded_file_number.empty() ? "???" : loaded_file_number) 
+              << ".txt does not exist! ###\n";
         Start();
         continue;
       }
@@ -658,7 +667,9 @@ int main() {
     else if (command == 4) {
       // 任務四：同樣要先跑過 2
       if (!file_loaded) {
-        std::cout << "\n### Please run command 2 first! ###\n";
+        std::cout << "\n### sorted" 
+              << (loaded_file_number.empty() ? "???" : loaded_file_number) 
+              << ".txt does not exist! ###\n";
         Start();
         continue;
       }
