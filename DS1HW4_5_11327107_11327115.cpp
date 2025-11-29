@@ -448,12 +448,13 @@ void SimulateMultiQueues(Order* arr, int n, int N,
       nextArrival = std::numeric_limits<int>::max();
     }  
 
-    // Step A: 舊訂單先處理到 nextArrival 之前 (修正處)
+    // Step A: 舊訂單先處理到 nextArrival 之前 (處理佇列內較早可執行的舊訂單)
     for (int i = 0; i < N; i++) {
       if (!qs[i].empty()) {
-        // 修正點：移除 if (idleTime[i] <= nextArrival) 限制。
-        // 只要佇列不空，就讓廚師處理。processChefUntil 內部會確保處理到 nextArrival 為止。
-        processChefUntil(i, nextArrival, qs[i], idleTime[i], abortList, timeoutList);
+        // 只要這位廚師在 nextArrival 之前有空，就讓他從 queue 取訂單來處理
+        if (idleTime[i] <= nextArrival) { 
+          processChefUntil(i, nextArrival, qs[i], idleTime[i], abortList, timeoutList);
+        }
       }
     }
 
@@ -462,7 +463,7 @@ void SimulateMultiQueues(Order* arr, int n, int N,
       continue; 
     }
 
-    // Step B: 在 nextArrival 時刻處理新的訂單（此處邏輯不變）
+    // Step B: 在 nextArrival 時刻處理新的訂單（可能有多筆 arrival 相同）
     while (idx < n && arr[idx].arrival == nextArrival) {
       Order &cur = arr[idx];
 
@@ -488,7 +489,9 @@ void SimulateMultiQueues(Order* arr, int n, int N,
       if (idleAndEmptyChefs.size() > 0) {
           // Case 1 & 2: 存在閒置且佇列空的廚師
           
-          // 規則：選編號最小者。
+          // Case 2/1 規則：選這些閒置廚師中「廚師編號」最小者。
+          // 因為 idleAndEmptyChefs 是 i 從 0 到 N-1 順序加入的，
+          // 所以第一個元素 (index 0) 就是編號最小者。
           chosen = idleAndEmptyChefs[0];
       } 
       
@@ -504,7 +507,8 @@ void SimulateMultiQueues(Order* arr, int n, int N,
               if (!qs[i].full()) {
                   int len = qs[i].size();
                   
-                  // Case 3 規則：選最短的；長度相同時，選編號最小者。 (邏輯正確)
+                  // Case 3 規則：選最短的；長度相同時，選編號最小者。
+                  // 由於 i 是從小到大，使用 '<' 比較能保證當 len == bestLen 時，chosen 保持最小的 i (CID)。
                   if (len < bestLen) { 
                       bestLen = len;
                       shortestQueueChef = i;
@@ -513,11 +517,12 @@ void SimulateMultiQueues(Order* arr, int n, int N,
           }
           
           if (shortestQueueChef != -1) {
-              // Case 3: 至少一個佇列並非全滿
+              // Case 3: 每位廚師都並非閒置 (已由外層 else 確定) 且至少一個佇列並非全滿
               chosen = shortestQueueChef;
           }
           else {
               // Case 4: 每位廚師都並非閒置且佇列全滿
+              // chosen 保持 -1，將在下方邏輯中被取消
           }
       }
 
@@ -539,7 +544,7 @@ void SimulateMultiQueues(Order* arr, int n, int N,
     // 回到 while 開頭，繼續下一輪
   }
 
-  // ... (後續的結果計算與寫檔邏輯保持不變) ...
+  // 模擬完成後：計算 total delay 與 failure percentage
   int totaldelay = 0;
   for (size_t i = 0; i < abortList.size(); i++) {
     totaldelay += abortList[i].delay;
@@ -554,6 +559,7 @@ void SimulateMultiQueues(Order* arr, int n, int N,
     failurePercent = int(temp * 100 + 0.5) / 100.0;
   }
 
+  // === 寫檔 (省略，保持原樣) ===
   fout << "\t[Abort List]\n";
   fout << "\tOID\tCID\tDelay\tAbort\n";
   for (size_t i = 0; i < abortList.size(); i++) {
@@ -581,8 +587,9 @@ void SimulateMultiQueues(Order* arr, int n, int N,
 
   fout.close();
   delete[] idleTime;
-  delete[] qs;
+  delete[] qs; // 釋放動態記憶體
 }
+
 int main() {
   Start();                
   std::string com;
