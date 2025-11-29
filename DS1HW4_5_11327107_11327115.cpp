@@ -98,29 +98,36 @@ void Print(Order *arr, int quantity) {
 }
 
 void SetSortFile(Order *arr, int quantity, std::string &sortfile) {
-  std::ofstream fout(sortfile);
-  fout << "\tOID\tArrival\tDuration\tTimeOut" << std::endl;
-  for ( int i = 0; i < quantity; i++ ) { 
+  std::ofstream fout(sortfile);                              // 建立 sortedXXX.txt 輸出檔
+
+  fout << "\tOID\tArrival\tDuration\tTimeOut" << std::endl; // 寫入標題
+
+  for ( int i = 0; i < quantity; i++ ) {                    // 依序寫入每筆排序後資料
     fout << arr[i].OID << "\t"
          << arr[i].arrival << "\t"
          << arr[i].duration << "\t"
          << arr[i].timeout << std::endl;
   }
-  fout.close();
+
+  fout.close();                                              // 關閉檔案
 }
 
+
 void ShellSort(Order *arr, int quantity) {
-  for ( int gap = quantity / 2; gap > 0; gap /= 2 ) {
+  for ( int gap = quantity / 2; gap > 0; gap /= 2 ) {        // 逐步縮小 gap（Shell Sort 標準流程）
     for ( int i = gap; i < quantity; i++ ) {
-      Order temp = arr[i];
+      Order temp = arr[i];                                   // 欲插入的元素
       int j = i;
 
-      while ( j >= gap && ( (arr[j - gap].arrival > temp.arrival) || 
-                            (arr[j - gap].arrival == temp.arrival && arr[j - gap].OID > temp.OID) ) ) {
-                              arr[j] = arr[j - gap];
-                              j = j - gap;
-                            }
-      arr[j] = temp;
+      while ( j >= gap &&                                    // 插入式比較（非交換法）
+             ( (arr[j - gap].arrival > temp.arrival) ||      // 先比 arrival
+               (arr[j - gap].arrival == temp.arrival && 
+                arr[j - gap].OID > temp.OID) ) ) {           // arrival 相同再比 OID
+        arr[j] = arr[j - gap];                               // 移動元素騰出插入位置
+        j = j - gap;
+      }
+
+      arr[j] = temp;                                         // 插入正確位置
     }
   }
 }
@@ -128,87 +135,86 @@ void ShellSort(Order *arr, int quantity) {
 void SaveAndShort(const std::string com) {
   Order *arr = nullptr;
   int quantity = 0;
-  std::string filename = "input" + com + ".txt";
+  std::string filename = "input" + com + ".txt"; 
   std::string sortfile = "sorted" + com + ".txt";
 
-  // 計讀檔時間
-  auto start = high_resolution_clock::now();
-  if (!Loadfile(filename, arr, quantity)) {
+  auto start = high_resolution_clock::now();                 
+  if (!Loadfile(filename, arr, quantity)) {                  // 讀失敗直接返回
     return;
   }
-  auto end = high_resolution_clock::now();
+  auto end = high_resolution_clock::now();                   
   long long reading = duration_cast<microseconds>(end - start).count();
 
-  Print(arr, quantity);
+  Print(arr, quantity);                                      // 列印原始資料
 
-  auto start1 = high_resolution_clock::now();
-  ShellSort(arr, quantity);
-  auto end1 = high_resolution_clock::now();
+  auto start1 = high_resolution_clock::now();                
+  ShellSort(arr, quantity);                       
+  auto end1 = high_resolution_clock::now();                 
   long long sorting = duration_cast<microseconds>(end1 - start1).count();
 
-  auto start2 = high_resolution_clock::now();
-  SetSortFile(arr, quantity, sortfile);
-  auto end2 = high_resolution_clock::now();
+  auto start2 = high_resolution_clock::now();             
+  SetSortFile(arr, quantity, sortfile);                      // 寫入 sortedXXX.txt
+  auto end2 = high_resolution_clock::now();                 
   long long writing = duration_cast<microseconds>(end2 - start2).count();
 
-  std::cout << "Reading data: " << reading << " us.\n" << std::endl;
-  std::cout << "Sorting data: " << sorting << " us.\n" << std::endl;
-  std::cout << "Writing data: " << writing << " us.";
-  
-  
+  std::cout << "Reading data: " << reading << " us.\n" << std::endl;   
+  std::cout << "Sorting data: " << sorting << " us.\n" << std::endl;   
+  std::cout << "Writing data: " << writing << " us.";                  
 }
+
 
 class Queue {
  private:
-  Order* data;
-  int capacity;
-  int front;
-  int back;
-  int count;
+  Order* data;           // 動態配置的陣列，用來存放訂單
+  int capacity;          // 佇列最大容量（預設 3）
+  int front;             // 佇列頭索引（取出位置）
+  int back;              // 佇列尾索引（放入位置）
+  int count;             // 目前佇列內的資料筆數
 
  public:
   Queue(int cap = 3) : capacity(cap), front(0), back(0), count(0) {
-    data = new Order[capacity];
+    data = new Order[capacity];   // 配置固定容量的循環佇列空間
   }
 
   ~Queue() {
-    delete[] data;
+    delete[] data;                // 釋放動態陣列
   }
 
   bool empty() { 
-    return count == 0;
+    return count == 0;            // 判斷佇列是否為空
   }
 
   bool full() { 
-    return count == capacity; 
+    return count == capacity;     // 判斷佇列是否已滿
   }
 
   bool push(const Order &order) {
-    if (full()) {
+    if (full()) {                 // 空間不足 → push 失敗
       return false;
     }
 
-    data[back] = order;
-    back = (back + 1) % capacity;
-    count++;
+    data[back] = order;           // 將訂單放入尾端
+    back = (back + 1) % capacity; // 循環佇列尾指標往後移
+    count++;                      // 資料數量 +1
     return true;
   }
 
   bool pop(Order &order) {
-    if (empty()) {
+    if (empty()) {                // 空佇列 → pop 失敗
       return false;
     }
 
-    order = data[front];
-    front = (front + 1) % capacity;
-    count--;
+    order = data[front];          // 取出頭端資料
+    front = (front + 1) % capacity; // 循環佇列頭指標往後移
+    count--;                      // 資料數量 -1
     return true;
   }
 
   int size() const { 
-    return count; 
+    return count;                 // 回傳佇列內目前的訂單數
   }
 };
+
 
 void SetOneFile(Order *arr, int n, std::string com) {
   std::string onefile = "one" + com + ".txt";
@@ -358,75 +364,63 @@ void processChefUntil(int chefId, int limitTime,
                       Queue &q, int &idleTime,
                       std::vector<Abortlist> &abortList,
                       std::vector<Timeout> &timeoutList) {
-  // chefId: 0-based，實際 CID = chefId + 1
-  while (!q.empty() && idleTime <= limitTime) {
-    // 先取出佇列最前面的訂單
+  while (!q.empty() && idleTime <= limitTime) {                // 只有在廚師可工作且佇列不空時處理
     Order cur;
-    q.pop(cur);
+    q.pop(cur);                                                // 取出一筆舊訂單（FIFO）
 
-    // 真正開始處理這筆訂單的時間：
-    // 不能早於廚師目前的閒置時刻，也不能早於訂單的到達時刻
-    int startTime = std::max(idleTime, cur.arrival);
+    int startTime = std::max(idleTime, cur.arrival);           // 真正開始時間：不能早於 arrival
 
-    // 取出時就發現已經逾時：Timeout < 取出時刻(startTime)
-    if (cur.timeout < startTime) {
-      int delay = startTime - cur.arrival;  // Abort - Arrival
+    if (cur.timeout < startTime) {                             // 取出時即逾時 → 取消
+      int delay = startTime - cur.arrival;
       abortList.push_back({cur.OID, chefId + 1, delay, startTime});
-      idleTime = startTime;                 // 廚師時間跳到這個取消時刻
+      idleTime = startTime;                                     // 廚師時間前進到取消時刻
       continue;
     }
 
-    // 可以開始做，計算完成時間
-    int finishTime = startTime + cur.duration;
-    idleTime = finishTime;   // 廚師完成這道菜的時刻
+    int finishTime = startTime + cur.duration;                 // 完成時間
+    idleTime = finishTime;                                      // 更新廚師閒置時刻
 
-    // 做完才發現逾時：Timeout < 完成時刻
-    if (cur.timeout < finishTime) {
-      int delay = startTime - cur.arrival;  // 取出時刻 - Arrival
+    if (cur.timeout < finishTime) {                            // 完成後才發現逾時
+      int delay = startTime - cur.arrival;
       timeoutList.push_back({cur.OID, chefId + 1, delay, finishTime});
     }
-    // 沒逾時：只更新 idleTime，不需記錄
   }
 }
+
 
 void SimulateMultiQueues(Order* arr, int n, int N,
                          const std::string& prefix,
                          const std::string& com) {
-  // 輸出檔名：prefix + 檔案編號，例如 "two401.txt"、"any402.txt"
-  std::string outFile = prefix + com + ".txt";
+  std::string outFile = prefix + com + ".txt";                 // 建立輸出檔名
   std::ofstream fout(outFile);
 
-  // N 位廚師，各自有 idleTime 與 Queue
-  int* idleTime = new int[N];
-  Queue* qs = new Queue[N];
+  int* idleTime = new int[N];                                  // N 位廚師各自的 idle time
+  Queue* qs = new Queue[N];                                    // N 個獨立 FIFO 佇列
 
   for (int i = 0; i < N; i++) {
-    idleTime[i] = 0;
+    idleTime[i] = 0;                                           // 全部從 0 開始
   }
 
   std::vector<Abortlist> abortList;
   std::vector<Timeout> timeoutList;
 
-  // 計算有效訂單總數（和 SetOneFile 一致）
-  int validnum = 0;
+  int validnum = 0;                                            // 計算有效訂單數
   for (int i = 0; i < n; i++) {
     if (arr[i].duration > 0 && (arr[i].arrival + arr[i].duration <= arr[i].timeout)) {
       validnum++;
     }
   }
 
-  int idx = 0; // 指向下一筆要處理的訂單 index
+  int idx = 0;                                                 // 下一筆訂單 index
 
   while (true) {
-    // 跳過無效訂單
-    while (idx < n &&
+    while (idx < n &&                                          // 跳過無效訂單
           (arr[idx].duration <= 0 ||
-           (arr[idx].arrival + arr[idx].duration) > arr[idx].timeout)) {
+           arr[idx].arrival + arr[idx].duration > arr[idx].timeout)) {
       idx++;
     }
 
-    // 檢查所有佇列是否為空
-    bool allEmpty = true;
+    bool allEmpty = true;                                      // 檢查所有佇列是否全空
     for (int i = 0; i < N; i++) {
       if (!qs[i].empty()) {
         allEmpty = false;
@@ -434,72 +428,52 @@ void SimulateMultiQueues(Order* arr, int n, int N,
       }
     }
 
-    // 若沒有剩餘有效訂單且所有佇列皆空 -> 模擬結束
-    if (idx >= n && allEmpty) {
+    if (idx >= n && allEmpty) {                                // 沒訂單且佇列空 → 模擬結束
       break;
     }
 
-    // 下一個抵達的訂單時間
-    int nextArrival;
-    if (idx < n) {
-      nextArrival = arr[idx].arrival;
-    }
+    int nextArrival;                                           // 下一筆新訂單抵達時間
+    if (idx < n) nextArrival = arr[idx].arrival;
+    else nextArrival = std::numeric_limits<int>::max();
 
-    else {
-      nextArrival = std::numeric_limits<int>::max();
-    }  
-
-    // Step A: 舊訂單先處理到 nextArrival 之前
-    for (int i = 0; i < N; i++) {
-      if (!qs[i].empty()) {
-        // 只要這位廚師在 nextArrival 之前有空，就讓他從 queue 取訂單來處理
-        if (idleTime[i] <= nextArrival) {
-          processChefUntil(i, nextArrival, qs[i], idleTime[i], abortList, timeoutList);
-        }
+    for (int i = 0; i < N; i++) {                              // Step A：先處理舊訂單
+      if (!qs[i].empty() && idleTime[i] <= nextArrival) {
+        processChefUntil(i, nextArrival, qs[i], idleTime[i], abortList, timeoutList);
       }
     }
 
-    // 若已沒有新訂單（idx >= n），這一輪 Step A 已經把剩餘 queue 中的訂單處理到 limitTime，
-    // 再檢查一次是否全空，如果不是，下一輪 limitTime 會是 INT_MAX，會把全部做完。
-    if (idx >= n) {
-      // 直接進入下一輪 while，等待 allEmpty == true 觸發 break
+    if (idx >= n) {                                            // 已無新訂單 → 下一輪進入收尾
       continue;
     }
 
-    // Step B: 在 nextArrival 時刻處理新的訂單（可能有多筆 arrival 相同）
+    // Step B：處理所有 arrival == nextArrival 的新訂單
     while (idx < n && arr[idx].arrival == nextArrival) {
       Order &cur = arr[idx];
 
-      // 再次確認是否有效（理論上前面已經過濾）
-      if (cur.duration <= 0 || cur.arrival + cur.duration > cur.timeout) {
+      if (cur.duration <= 0 ||                                 // 再次確認有效性
+          cur.arrival + cur.duration > cur.timeout) {
         idx++;
         continue;
       }
 
-      // 找出閒置且 queue 為空的廚師（Case1 / Case2 使用）
-      std::vector<int> idleChefs;
+      std::vector<int> idleChefs;                              // 找 idle 且 queue 空的廚師
       for (int i = 0; i < N; i++) {
         if (idleTime[i] <= nextArrival && qs[i].empty()) {
           idleChefs.push_back(i);
         }
       }
 
-      int chosen = -1; // -1 表示還沒選出廚師
+      int chosen = -1;                                         // 選到的廚師
 
-      if (idleChefs.size() == 1) {
-        // Case 1: 只有一位廚師閒置且佇列空
+      if (idleChefs.size() == 1) {                             // Case 1：唯一閒置者
         chosen = idleChefs[0];
       } 
       
-      else if (idleChefs.size() > 1) {
-        // Case 2: 不只一位廚師閒置，選編號最小
-        chosen = idleChefs[0]; // idleChefs 按 i 遞增加入
+      else if (idleChefs.size() > 1) {                         // Case 2：多位閒置 → 選編號最小
+        chosen = idleChefs[0];
       } 
       
-      else {
-        // 沒有閒置廚師，進入 Case 3 / Case 4 判斷
-
-        // 先檢查是否所有佇列都滿
+      else {                                                   // 無閒置 → Case 3 or 4
         bool allFull = true;
         for (int i = 0; i < N; i++) {
           if (!qs[i].full()) {
@@ -508,13 +482,10 @@ void SimulateMultiQueues(Order* arr, int n, int N,
           }
         }
 
-        if (allFull) {
-          // Case 4: 每位廚師都不閒置且所有佇列皆滿 -> 立刻取消，CID = 0
+        if (allFull) {                                         // Case 4：所有佇列都滿
           abortList.push_back({cur.OID, 0, 0, cur.arrival});
         } 
-        
-        else {
-          // Case 3: 至少一個佇列未滿 -> 選佇列長度最短的，若有多個取編號最小
+        else {                                                 // Case 3：選最短佇列
           int bestLen = std::numeric_limits<int>::max();
           for (int i = 0; i < N; i++) {
             if (!qs[i].full()) {
@@ -528,34 +499,25 @@ void SimulateMultiQueues(Order* arr, int n, int N,
         }
       }
 
-      if (chosen != -1) {
-        // 有選到廚師 -> 丟進他的 queue
+      if (chosen != -1) {                                      // 若選到了廚師 → 丟進 queue
         qs[chosen].push(cur);
       }
 
-      idx++; // 處理下一筆 arrival == nextArrival 的訂單
+      idx++;                                                   // 下一筆訂單
     }
-
-    // 回到 while 開頭，繼續下一輪（下一個 arrival 或處理剩餘 queue）
   }
 
-  // 所有訂單模擬完成後：計算 total delay 與 failure percentage
-  int totaldelay = 0;
-  for (int i = 0; i < abortList.size(); i++) {
-    totaldelay += abortList[i].delay;
-  }
-  for (int i = 0; i < timeoutList.size(); i++) {
-    totaldelay += timeoutList[i].delay;
-  }
+  int totaldelay = 0;                                          // 計算總延誤
+  for (int i = 0; i < abortList.size(); i++) totaldelay += abortList[i].delay;
+  for (int i = 0; i < timeoutList.size(); i++) totaldelay += timeoutList[i].delay;
 
   double failurePercent = 0.0;
   if (validnum > 0) {
     double temp = (double)(abortList.size() + timeoutList.size()) / validnum * 100.0;
-    failurePercent = int(temp * 100 + 0.5) / 100.0;
+    failurePercent = int(temp * 100 + 0.5) / 100.0;            // 四捨五入到小數點第二位
   }
 
-  // === 寫檔 ===
-  fout << "\t[Abort List]\n";
+  fout << "\t[Abort List]\n";                                  // 取消清單
   fout << "\tOID\tCID\tDelay\tAbort\n";
   for (int i = 0; i < abortList.size(); i++) {
     fout << "[" << (i + 1) << "]\t"
@@ -565,7 +527,7 @@ void SimulateMultiQueues(Order* arr, int n, int N,
          << abortList[i].abort << "\n";
   }
 
-  fout << "\t[Timeout List]\n";
+  fout << "\t[Timeout List]\n";                                // 逾時清單
   fout << "\tOID\tCID\tDelay\tDeparture\n";
   for (int i = 0; i < timeoutList.size(); i++) {
     fout << "[" << (i + 1) << "]\t"
@@ -577,11 +539,12 @@ void SimulateMultiQueues(Order* arr, int n, int N,
 
   fout << "[Total Delay]\n";
   fout << totaldelay << " min.\n";
+
   fout << "[Failure Percentage]\n";
   fout << std::fixed << std::setprecision(2) << failurePercent << " %\n";
 
   fout.close();
-  delete[] idleTime;
+  delete[] idleTime;                                           // 清除動態記憶體
   delete[] qs;
 }
 
