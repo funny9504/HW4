@@ -88,13 +88,12 @@ void Print(Order *arr, int quantity) {
   std::cout << std::endl;
   std::cout << "\tOID\tArrival\tDuration\tTimeOut" << std::endl;
   for ( int i = 0; i < quantity; i++ ) {
-    std::cout << "(" << i + 1 << ")\t"
+    std::cout << "(" << i + 1 << ") \t"
               << arr[i].OID << "\t"
               << arr[i].arrival << "\t"
               << arr[i].duration << "\t"
               << arr[i].timeout << std::endl;
   }
-  std::cout << std::endl;
 }
 
 void SetSortFile(Order *arr, int quantity, std::string &sortfile) {
@@ -157,9 +156,9 @@ void SaveAndShort(const std::string com) {
   auto end2 = high_resolution_clock::now();                 
   long long writing = duration_cast<microseconds>(end2 - start2).count();
 
-  std::cout << "Reading data: " << reading << " us.\n" << std::endl;   
-  std::cout << "Sorting data: " << sorting << " us.\n" << std::endl;   
-  std::cout << "Writing data: " << writing << " us.";                  
+  std::cout << "\nReading data: " << reading << " us.\n";   
+  std::cout << "\nSorting data: " << sorting << " us.\n";   
+  std::cout << "\nWriting data: " << writing << " us.";                  
 }
 
 
