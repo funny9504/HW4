@@ -101,10 +101,10 @@ void SetSortFile(Order *arr, int quantity, std::string &sortfile) {
   std::ofstream fout(sortfile);
   fout << "\tOID\tArrival\tDuration\tTimeOut" << std::endl;
   for ( int i = 0; i < quantity; i++ ) { 
-    fout  << arr[i].OID << "\t"
-          << arr[i].arrival << "\t"
-          << arr[i].duration << "\t"
-          << arr[i].timeout << std::endl;
+    fout << arr[i].OID << "\t"
+         << arr[i].arrival << "\t"
+         << arr[i].duration << "\t"
+         << arr[i].timeout << std::endl;
   }
   fout.close();
 }
@@ -159,52 +159,56 @@ void SaveAndShort(const std::string com) {
 }
 
 class Queue {
-private:
-    Order* data;
-    int capacity;
-    int front;
-    int back;
-    int count;
-public:
-    Queue(int cap = 3) : capacity(cap), front(0), back(0), count(0) {
-        data = new Order[capacity];
-    }
-    ~Queue() {
-        delete[] data;
+ private:
+  Order* data;
+  int capacity;
+  int front;
+  int back;
+  int count;
+
+ public:
+  Queue(int cap = 3) : capacity(cap), front(0), back(0), count(0) {
+    data = new Order[capacity];
+  }
+
+  ~Queue() {
+    delete[] data;
+  }
+
+  bool empty() { 
+    return count == 0;
+  }
+
+  bool full() { 
+    return count == capacity; 
+  }
+
+  bool push(const Order &order) {
+    if (full()) {
+      return false;
     }
 
-    bool empty() const { 
-      return count == 0;
-    }
-    bool full()  const { 
-      return count == capacity; 
+    data[back] = order;
+    back = (back + 1) % capacity;
+    count++;
+    return true;
+  }
+
+  bool pop(Order &order) {
+    if (empty()) {
+      return false;
     }
 
-    bool push(const Order &order) {
-        if (full()) {
-          return false;
-        }
-        data[back] = order;
-        back = (back + 1) % capacity;
-        ++count;
-        return true;
-    }
+    order = data[front];
+    front = (front + 1) % capacity;
+    count--;
+    return true;
+  }
 
-    bool pop(Order &order) {
-        if (empty()) {
-          return false;
-        }
-        order = data[front];
-        front = (front + 1) % capacity;
-        --count;
-        return true;
-    }
-
-    int size() const { 
-      return count; 
-    }
+  int size() const { 
+    return count; 
+  }
 };
-
 
 void SetOneFile(Order *arr, int n, std::string com) {
   std::string onefile = "one" + com + ".txt";
@@ -385,7 +389,6 @@ void processChefUntil(int chefId, int limitTime,
   }
 }
 
-
 void SimulateMultiQueues(Order* arr, int n, int N,
                          const std::string& prefix,
                          const std::string& com) {
@@ -395,9 +398,9 @@ void SimulateMultiQueues(Order* arr, int n, int N,
 
   // N 位廚師，各自有 idleTime 與 Queue
   int* idleTime = new int[N];
-  Queue* qs     = new Queue[N];
+  Queue* qs = new Queue[N];
 
-  for (int i = 0; i < N; ++i) {
+  for (int i = 0; i < N; i++) {
     idleTime[i] = 0;
   }
 
@@ -406,9 +409,9 @@ void SimulateMultiQueues(Order* arr, int n, int N,
 
   // 計算有效訂單總數（和 SetOneFile 一致）
   int validnum = 0;
-  for (int i = 0; i < n; ++i) {
+  for (int i = 0; i < n; i++) {
     if (arr[i].duration > 0 && (arr[i].arrival + arr[i].duration <= arr[i].timeout)) {
-      ++validnum;
+      validnum++;
     }
   }
 
@@ -419,12 +422,12 @@ void SimulateMultiQueues(Order* arr, int n, int N,
     while (idx < n &&
           (arr[idx].duration <= 0 ||
            (arr[idx].arrival + arr[idx].duration) > arr[idx].timeout)) {
-      ++idx;
+      idx++;
     }
 
     // 檢查所有佇列是否為空
     bool allEmpty = true;
-    for (int i = 0; i < N; ++i) {
+    for (int i = 0; i < N; i++) {
       if (!qs[i].empty()) {
         allEmpty = false;
         break;
@@ -438,11 +441,16 @@ void SimulateMultiQueues(Order* arr, int n, int N,
 
     // 下一個抵達的訂單時間
     int nextArrival;
-    if (idx < n) nextArrival = arr[idx].arrival;
-    else         nextArrival = std::numeric_limits<int>::max();
+    if (idx < n) {
+      nextArrival = arr[idx].arrival;
+    }
+
+    else {
+      nextArrival = std::numeric_limits<int>::max();
+    }  
 
     // Step A: 舊訂單先處理到 nextArrival 之前
-    for (int i = 0; i < N; ++i) {
+    for (int i = 0; i < N; i++) {
       if (!qs[i].empty()) {
         // 只要這位廚師在 nextArrival 之前有空，就讓他從 queue 取訂單來處理
         if (idleTime[i] <= nextArrival) {
@@ -464,13 +472,13 @@ void SimulateMultiQueues(Order* arr, int n, int N,
 
       // 再次確認是否有效（理論上前面已經過濾）
       if (cur.duration <= 0 || cur.arrival + cur.duration > cur.timeout) {
-        ++idx;
+        idx++;
         continue;
       }
 
       // 找出閒置且 queue 為空的廚師（Case1 / Case2 使用）
       std::vector<int> idleChefs;
-      for (int i = 0; i < N; ++i) {
+      for (int i = 0; i < N; i++) {
         if (idleTime[i] <= nextArrival && qs[i].empty()) {
           idleChefs.push_back(i);
         }
@@ -481,15 +489,19 @@ void SimulateMultiQueues(Order* arr, int n, int N,
       if (idleChefs.size() == 1) {
         // Case 1: 只有一位廚師閒置且佇列空
         chosen = idleChefs[0];
-      } else if (idleChefs.size() > 1) {
+      } 
+      
+      else if (idleChefs.size() > 1) {
         // Case 2: 不只一位廚師閒置，選編號最小
         chosen = idleChefs[0]; // idleChefs 按 i 遞增加入
-      } else {
+      } 
+      
+      else {
         // 沒有閒置廚師，進入 Case 3 / Case 4 判斷
 
         // 先檢查是否所有佇列都滿
         bool allFull = true;
-        for (int i = 0; i < N; ++i) {
+        for (int i = 0; i < N; i++) {
           if (!qs[i].full()) {
             allFull = false;
             break;
@@ -499,10 +511,12 @@ void SimulateMultiQueues(Order* arr, int n, int N,
         if (allFull) {
           // Case 4: 每位廚師都不閒置且所有佇列皆滿 -> 立刻取消，CID = 0
           abortList.push_back({cur.OID, 0, 0, cur.arrival});
-        } else {
+        } 
+        
+        else {
           // Case 3: 至少一個佇列未滿 -> 選佇列長度最短的，若有多個取編號最小
           int bestLen = std::numeric_limits<int>::max();
-          for (int i = 0; i < N; ++i) {
+          for (int i = 0; i < N; i++) {
             if (!qs[i].full()) {
               int len = qs[i].size();
               if (len < bestLen) {
@@ -519,7 +533,7 @@ void SimulateMultiQueues(Order* arr, int n, int N,
         qs[chosen].push(cur);
       }
 
-      ++idx; // 處理下一筆 arrival == nextArrival 的訂單
+      idx++; // 處理下一筆 arrival == nextArrival 的訂單
     }
 
     // 回到 while 開頭，繼續下一輪（下一個 arrival 或處理剩餘 queue）
@@ -527,10 +541,10 @@ void SimulateMultiQueues(Order* arr, int n, int N,
 
   // 所有訂單模擬完成後：計算 total delay 與 failure percentage
   int totaldelay = 0;
-  for (int i = 0; i < (int)abortList.size(); ++i) {
+  for (int i = 0; i < abortList.size(); i++) {
     totaldelay += abortList[i].delay;
   }
-  for (int i = 0; i < (int)timeoutList.size(); ++i) {
+  for (int i = 0; i < timeoutList.size(); i++) {
     totaldelay += timeoutList[i].delay;
   }
 
@@ -543,7 +557,7 @@ void SimulateMultiQueues(Order* arr, int n, int N,
   // === 寫檔 ===
   fout << "\t[Abort List]\n";
   fout << "\tOID\tCID\tDelay\tAbort\n";
-  for (int i = 0; i < (int)abortList.size(); ++i) {
+  for (int i = 0; i < abortList.size(); i++) {
     fout << "[" << (i + 1) << "]\t"
          << abortList[i].OID << "\t"
          << abortList[i].CID << "\t"
@@ -553,7 +567,7 @@ void SimulateMultiQueues(Order* arr, int n, int N,
 
   fout << "\t[Timeout List]\n";
   fout << "\tOID\tCID\tDelay\tDeparture\n";
-  for (int i = 0; i < (int)timeoutList.size(); ++i) {
+  for (int i = 0; i < timeoutList.size(); i++) {
     fout << "[" << (i + 1) << "]\t"
          << timeoutList[i].OID << "\t"
          << timeoutList[i].CID << "\t"
@@ -594,7 +608,7 @@ int main() {
     }
 
     if (command == 0) {
-      // 結束前記得釋放動態陣列
+      // 結束前釋放動態陣列
       delete[] arr;
       return 0;
     } 
@@ -619,9 +633,7 @@ int main() {
       while (com.empty()) {
         std::getline(std::cin, com);
       }
-
       std::string sortfile = "sorted" + com + ".txt";
-
       // 若之前已經有讀過 arr，要先釋放
       if (arr != nullptr) {
         delete[] arr;
@@ -641,7 +653,6 @@ int main() {
 
       Print(arr, quantity);
       SetOneFile(arr, quantity, com);   // 任務二模擬
-
       Start();
       continue;
     }
@@ -649,17 +660,13 @@ int main() {
     else if (command == 3) {
       // 任務三：一定要先有任務二載入過資料
       if (!file_loaded) {
-        std::cout << "\n### sorted" 
-              << (loaded_file_number.empty() ? "???" : loaded_file_number) 
-              << ".txt does not exist! ###\n";
+        std::cout << "\n### Execute command 2 first! ###\n";
         Start();
         continue;
       }
 
-      // 這裡直接用 arr, quantity, loaded_file_number
       // N 固定為 2，prefix 為 "two"（產生 twoXXX.txt）
       SimulateMultiQueues(arr, quantity, 2, "two", loaded_file_number);
-
       Start();
       continue;
     }
@@ -667,24 +674,36 @@ int main() {
     else if (command == 4) {
       // 任務四：同樣要先跑過 2
       if (!file_loaded) {
-        std::cout << "\n### sorted" 
-              << (loaded_file_number.empty() ? "???" : loaded_file_number) 
-              << ".txt does not exist! ###\n";
+        std::cout << "\n### Execute command 2 first! ###\n";
         Start();
         continue;
       }
 
       int N = 0;
-      std::string tmp;
       std::cout << "\nInput the number of queues: ";
-      std::getline(std::cin, tmp);
-      while (tmp.empty()) std::getline(std::cin, tmp);
+      while(1) {
+        std::string tmp;
+        std::getline(std::cin, tmp);
 
-      std::stringstream ssN(tmp);
-      if (!(ssN >> N) || N <= 0) {
-        std::cout << "Invalid N!\n";
-        Start();
-        continue;
+        if (tmp.empty()) {
+          continue;
+        }
+
+        std::stringstream ssN(tmp);
+        if (!(ssN >> N) || N < 0) {
+          std::cout << "\nInput the number of queues: ";
+          continue;
+        }
+
+        if (N == 0 || N > 19) {
+          std::cout << "\n### It is NOT in [1,19] ###\n";
+          std::cout << "\nInput the number of queues: ";
+          continue;
+        }
+
+        if (N > 0 && N <= 19) {
+          break;
+        }
       }
 
       std::string prefix;
@@ -693,7 +712,6 @@ int main() {
       else prefix = "any";
 
       SimulateMultiQueues(arr, quantity, N, prefix, loaded_file_number);
-
       Start();
       continue;
     }
