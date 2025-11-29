@@ -158,50 +158,52 @@ void SaveAndShort(const std::string com) {
 }
 
 class Queue {
- private:
-  Order data[3];
-  static const int capacity = 3; // 最多三筆
-  int front;
-  int back;
-  int count;
-
- public:
-  Queue() {
-    front = 0;
-    back = 0;
-    count = 0;
-  }
-
-  bool empty() {
-    return count == 0;
-  }
-
-  bool full() {
-    return count == capacity;
-  }
-
-  bool push(Order &order) {
-    if ( full() ) {
-      return false;
+private:
+    Order* data;
+    int capacity;
+    int front;
+    int back;
+    int count;
+public:
+    Queue(int cap = 3) : capacity(cap), front(0), back(0), count(0) {
+        data = new Order[capacity];
+    }
+    ~Queue() {
+        delete[] data;
     }
 
-    data[back] = order;
-    back = ( back + 1 ) % 3;
-    count++;
-    return true;
-  }
-
-  bool pop(Order &order) {
-    if ( empty() ) {
-      return false;
+    bool empty() const { 
+      return count == 0;
+    }
+    bool full()  const { 
+      return count == capacity; 
     }
 
-    order = data[front];
-    front = ( front + 1 ) % 3;
-    count--;
-    return true;
-  }
+    bool push(const Order &order) {
+        if (full()) {
+          return false;
+        }
+        data[back] = order;
+        back = (back + 1) % capacity;
+        ++count;
+        return true;
+    }
+
+    bool pop(Order &order) {
+        if (empty()) {
+          return false;
+        }
+        order = data[front];
+        front = (front + 1) % capacity;
+        --count;
+        return true;
+    }
+
+    int size() const { 
+      return count; 
+    }
 };
+
 
 void SetOneFile(Order *arr, int n, std::string com) {
   std::string onefile = "one" + com + ".txt";
