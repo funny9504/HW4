@@ -353,93 +353,125 @@ void SetOneFile(Order *arr, int n, std::string com) {
     fout.close();
 }
 
-void processChefUntil(int chefId, int limitTime,
-                      Queue &q, int &idleTime,
+void processChefUntil(int chefId, int limittime,
+                      Queue &q, int &idletime,
                       std::vector<Abortlist> &abortList,
                       std::vector<Timeout> &timeoutList) {
   
-  while (!q.empty() && idleTime <= limitTime) {
+  while (!q.empty() && idletime <= limittime) {
     Order cur;
-    q.pop(cur); 
+    q.pop(cur);
 
-    int startTime = std::max(idleTime, cur.arrival);
+    int starttime = std::max(idletime, cur.arrival);
 
-    if (cur.timeout < startTime) {
-      int delay = startTime - cur.arrival;
-      abortList.push_back({cur.OID, chefId + 1, delay, startTime});
-      idleTime = startTime;
+    if (cur.timeout < starttime) {
+      int delay = starttime - cur.arrival;
+      abortList.push_back({cur.OID, chefId + 1, delay, starttime});
+      idletime = starttime;
       continue;
     }
 
-    int finishTime = startTime + cur.duration;
-    idleTime = finishTime;
+    int finishtime = starttime + cur.duration;
+    idletime = finishtime;
 
-    if (cur.timeout < finishTime) {
-      int delay = startTime - cur.arrival;
-      timeoutList.push_back({cur.OID, chefId + 1, delay, finishTime});
+    if (cur.timeout < finishtime) {
+      int delay = starttime - cur.arrival;
+      timeoutList.push_back({cur.OID, chefId + 1, delay, finishtime});
     }
   }
 }
 
-void SimulateMultiQueues(Order* arr, int n, int N,
+ void SimulateMultiQueues(Order* arr, int n, int N,
                          const std::string& prefix,
                          const std::string& com) {
   std::string outFile = prefix + com + ".txt";
   std::ofstream fout(outFile);
 
-  int* idleTime = new int[N];
-  Queue* qs     = new Queue[N];
-  for (int i = 0; i < N; ++i) idleTime[i] = 0;
+  int* idle = new int[N];
+  Queue* qs = new Queue[N];
+  for (int i = 0; i < N; ++i) idle[i] = 0;
 
   std::vector<Abortlist> abortList;
   std::vector<Timeout> timeoutList;
 
   int validnum = 0;
-  for (int i = 0; i < n; ++i) {
-    if (arr[i].duration > 0 && (arr[i].arrival + arr[i].duration <= arr[i].timeout)) ++validnum;
+  for (int i = 0; i < n; i++) {
+    if (arr[i].duration > 0 && (arr[i].arrival + arr[i].duration <= arr[i].timeout)) {
+      validnum++;
+    }
   }
 
   int idx = 0;
+  // 暫存閒置廚師 ID
   std::vector<int> idleChefs;
 
-  // 分配
-  while (idx < n) {
-    while (idx < n && (arr[idx].duration <= 0 || (arr[idx].arrival + arr[idx].duration) > arr[idx].timeout)) idx++;
-    if (idx >= n) break;
+  while (true) {
+    // 跳過無效訂單
+    while (idx < n && (arr[idx].duration <= 0 || (arr[idx].arrival + arr[idx].duration) > arr[idx].timeout)) {
+      idx++;
+    }
 
-    int nextArrival = arr[idx].arrival;
-
-    // 先處理所有佇列直到 nextArrival
+    // 檢查結束
+    bool allEmpty = true;
     for (int i = 0; i < N; ++i) {
-      if (!qs[i].empty() && idleTime[i] <= nextArrival) {
-        processChefUntil(i, nextArrival, qs[i], idleTime[i], abortList, timeoutList);
+      if (!qs[i].empty()) { allEmpty = false; break; }
+    }
+    if (idx >= n && allEmpty) break;
+
+    int nextArrival;
+    if (idx < n) nextArrival = arr[idx].arrival;
+    else         nextArrival = std::numeric_limits<int>::max();
+
+    // Step A: 更新舊狀態 (落實 Rule 7)
+    for (int i = 0; i < N; ++i) {
+      if (!qs[i].empty()) {
+        if (idle[i] <= nextArrival) {
+          processChefUntil(i, nextArrival, qs[i], idle[i], abortList, timeoutList);
+        }
       }
     }
 
-    // 分配新訂單
+    if (idx >= n) continue;
+
+    // Step B: 分配新訂單
     while (idx < n && arr[idx].arrival == nextArrival) {
       Order &cur = arr[idx];
-      if (cur.duration <= 0 || cur.arrival + cur.duration > cur.timeout) { idx++; continue; }
+      if (cur.duration <= 0 || cur.arrival + cur.duration > cur.timeout) {
+        idx++; continue;
+      }
 
+      // 找閒置廚師 (定義：idleTime <= arrival 且 Queue 為空)
       idleChefs.clear();
       for (int i = 0; i < N; ++i) {
-        if (idleTime[i] <= nextArrival && qs[i].empty()) idleChefs.push_back(i);
+        if (idle[i] <= nextArrival && qs[i].empty()) {
+          idleChefs.push_back(i);
+        }
       }
 
       int chosen = -1;
       if (idleChefs.size() >= 1) {
+        // Case 1 & 2: 有閒置，選編號最小
         chosen = idleChefs[0];
       } else {
+        // Case 3 & 4: 無閒置，檢查佇列
         bool allFull = true;
-        for (int i = 0; i < N; ++i) if (!qs[i].full()) { allFull = false; break; }
+        for (int i = 0; i < N; ++i) {
+          if (!qs[i].full()) { allFull = false; break; }
+        }
+
         if (allFull) {
+          // Case 4: 全滿，拒絕
           abortList.push_back({cur.OID, 0, 0, cur.arrival});
         } else {
+          // Case 3: SQF (長度相同選編號小)
           int bestLen = std::numeric_limits<int>::max();
-          for (int i = 0; i < N; ++i) {
+          for (int i = 0; i < N; i++) {
             if (!qs[i].full()) {
               int len = qs[i].size();
-              if (len < bestLen) { bestLen = len; chosen = i; }
+              if (len < bestLen) {
+                bestLen = len;
+                chosen = i;
+              }
             }
           }
         }
@@ -447,77 +479,15 @@ void SimulateMultiQueues(Order* arr, int n, int N,
 
       if (chosen != -1) {
         qs[chosen].push(cur);
-        if (idleTime[chosen] <= cur.arrival) {
-             processChefUntil(chosen, cur.arrival, qs[chosen], idleTime[chosen], abortList, timeoutList);
+        if (idle[chosen] <= cur.arrival) {
+             processChefUntil(chosen, cur.arrival, qs[chosen], idle[chosen], abortList, timeoutList);
         }
       }
       idx++;
     }
   }
 
-  // 清空
-  // 將訂單 pop 出來暫存在 curOrder 中
-  std::vector<Order> curOrder(N);
-  std::vector<bool> hasOrder(N, false);
-
-  while (true) {
-      bool anyBusy = false;
-      for (int i = 0; i < N; ++i) {
-          if (!hasOrder[i] && !qs[i].empty()) {
-              qs[i].pop(curOrder[i]); 
-              hasOrder[i] = true;
-          }
-          if (hasOrder[i]) anyBusy = true;
-      }
-
-      if (!anyBusy) break;
-
-      // 找出所有「手上拿著訂單」的廚師中，完成時間最早的
-      int minEventTime = std::numeric_limits<int>::max();
-      int targetChef = -1;
-
-      for (int i = 0; i < N; ++i) {
-          if (hasOrder[i]) {
-              Order &order = curOrder[i];
-              int start = std::max(idleTime[i], order.arrival);
-              int eventTime;
-              
-              if (order.timeout < start) {
-                  eventTime = start; // Abort Time
-              } else {
-                  eventTime = start + order.duration; // Departure Time
-              }
-
-              if (eventTime < minEventTime) {
-                  minEventTime = eventTime;
-                  targetChef = i;
-              }
-          }
-      }
-
-      // 處理選中的那位廚師的訂單
-      if (targetChef != -1) {
-          Order &cur = curOrder[targetChef];
-          int start = std::max(idleTime[targetChef], cur.arrival);
-          
-          if (cur.timeout < start) {
-              int delay = start - cur.arrival;
-              abortList.push_back({cur.OID, targetChef + 1, delay, start});
-              idleTime[targetChef] = start;
-          } else {
-              int finishTime = start + cur.duration;
-              idleTime[targetChef] = finishTime;
-              if (cur.timeout < finishTime) {
-                  int delay = start - cur.arrival;
-                  timeoutList.push_back({cur.OID, targetChef + 1, delay, finishTime});
-              }
-          }
-          // 標記該廚師手上的訂單已處理完畢，下次迴圈可以再從 queue 拿新的
-          hasOrder[targetChef] = false;
-      }
-  }
-
-
+  // ===== 模擬結束，統計 Total Delay 與 Failure Percentage =====
   int totaldelay = 0;
   for (int i = 0; i < (int)abortList.size(); ++i) {
     totaldelay += abortList[i].delay;
@@ -560,6 +530,7 @@ void SimulateMultiQueues(Order* arr, int n, int N,
 
   fout.close();
 }
+
 
 int main() {
   Start();                
