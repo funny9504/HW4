@@ -366,12 +366,12 @@ void SimulateMultiQueues(Order* arr, int n, int N,
   std::string outFile = prefix + com + ".txt";
   std::ofstream fout(outFile);
 
-  // 每位廚師的狀態：目前是否忙、何時會完成、手上的訂單、以及自己的 queue
+  // 每位廚師的狀態
   struct Chef {
-    bool  busy;
-    int   freeTime;  // 這個廚師目前這道菜完成的時間
-    Order cur;       // 正在製作的訂單
-    Queue q;         // 此廚師專屬的等待佇列
+    bool  busy;      // 是否正在做菜
+    int   freeTime;  // 這道菜完成的時間
+    Order cur;       // 正在做的訂單
+    Queue q;         // 該廚師自己的等待佇列
 
     Chef() : busy(false), freeTime(0), q(3) {}
   };
@@ -385,13 +385,13 @@ void SimulateMultiQueues(Order* arr, int n, int N,
     return (o.duration > 0 && (o.arrival + o.duration <= o.timeout));
   };
 
-  // 計算有效訂單總數（和 SetOneFile 相同定義）
+  // 計算有效訂單數
   int validnum = 0;
   for (int i = 0; i < n; ++i) {
     if (isValidOrder(arr[i])) ++validnum;
   }
 
-  int idx = 0;            // 指向下一筆尚未處理的訂單
+  int idx = 0;          // 指向下一筆訂單
   int currentTime = 0;
 
   auto hasPending = [&]() {
@@ -402,8 +402,8 @@ void SimulateMultiQueues(Order* arr, int n, int N,
     return false;
   };
 
-  // 從某位廚師的 queue 取出下一筆可做的訂單：
-  // 在「開始做」的時候決定是否 Abort / Timeout，並依此刻時間寫入 list
+  // 從某位廚師的 queue 取出下一筆訂單：
+  // 在「開始做」的那一刻，決定是否 Abort / Timeout，並立刻寫入對應的 vector
   auto assignFromQueueToChef = [&](int chefId, int t) {
     Chef& c = chefs[chefId];
 
@@ -414,16 +414,16 @@ void SimulateMultiQueues(Order* arr, int n, int N,
       int startTime  = std::max(t, o.arrival);
       int finishTime = startTime + o.duration;
 
-      // 取出時就逾時（等待太久） → Abort
+      // 從佇列取出時就發現 timeout < startTime → 直接 abort
       if (o.timeout < startTime) {
         int delay = startTime - o.arrival;
         abortList.push_back({o.OID, chefId + 1, delay, startTime});
-        // 廚師仍然是 idle，繼續看 queue 下一筆
+        // 廚師仍然 idle，繼續看下一筆
         continue;
       }
 
-      // 會做完才發現逾時 → 在開始時就先寫入 timeoutList
-      if (finishTime > o.timeout) {  // 等價於 (o.timeout < finishTime)
+      // 一開始做就能知道最後會 timeout → 這裡先寫入 timeoutList
+      if (finishTime > o.timeout) {
         int delay = startTime - o.arrival;
         timeoutList.push_back({o.OID, chefId + 1, delay, finishTime});
       }
@@ -431,7 +431,7 @@ void SimulateMultiQueues(Order* arr, int n, int N,
       c.busy     = true;
       c.cur      = o;
       c.freeTime = finishTime;
-      break;  // 這位廚師已經有工作了
+      break;
     }
   };
 
@@ -441,16 +441,15 @@ void SimulateMultiQueues(Order* arr, int n, int N,
       ++idx;
     }
 
-    // 再檢查一次是否還有事情要做
     if (!hasPending()) break;
 
-    // 下一筆「到達」時間
+    // 下一筆到達時間
     int nextArrival = std::numeric_limits<int>::max();
     if (idx < n) {
       nextArrival = arr[idx].arrival;
     }
 
-    // 下一個「完成」時間（所有 busy 廚師中最早 freeTime）
+    // 下一個完成時間（所有 busy 廚師中最早的 freeTime）
     int nextFinish = std::numeric_limits<int>::max();
     for (int i = 0; i < N; ++i) {
       if (chefs[i].busy && chefs[i].freeTime < nextFinish) {
@@ -461,30 +460,27 @@ void SimulateMultiQueues(Order* arr, int n, int N,
     bool haveArrival = (nextArrival != std::numeric_limits<int>::max());
     bool haveFinish  = (nextFinish  != std::numeric_limits<int>::max());
 
-    if (!haveArrival && !haveFinish) {
-      // 理論上不會到這裡，但保險一下
-      break;
-    }
+    if (!haveArrival && !haveFinish) break;
 
-    // ========= Case 1: 只有完成事件，或完成早於下一筆到達 =========
+    // ===== Case 1: 只有完成事件，或完成早於下一筆到達 =====
     if (!haveArrival || (haveFinish && nextFinish < nextArrival)) {
       currentTime = nextFinish;
 
-      // 先處理所有在 currentTime 完成的廚師
+      // 處理所有在 currentTime 完成的廚師
       for (int i = 0; i < N; ++i) {
         Chef& c = chefs[i];
         if (c.busy && c.freeTime == currentTime) {
-          // Timeout 在開始時就已經記錄過了，因此這裡不用再判斷
+          // Timeout 已在開始時寫入，這裡只把廚師設為 idle
           c.busy = false;
         }
       }
 
-      // 完成後，先從各自的 queue 把下一筆交給廚師
+      // 完成後，從各自 queue 補下一筆給廚師
       for (int i = 0; i < N; ++i) {
         assignFromQueueToChef(i, currentTime);
       }
     }
-    // ========= Case 2: 只有到達事件，或到達早於下一筆完成 =========
+    // ===== Case 2: 只有到達事件，或到達早於下一筆完成 =====
     else if (!haveFinish || nextArrival < nextFinish) {
       currentTime = nextArrival;
 
@@ -497,7 +493,7 @@ void SimulateMultiQueues(Order* arr, int n, int N,
           continue;
         }
 
-        // 找出「閒置且 queue 為空」的廚師 (Case1 / Case2)
+        // 找出「閒置且 queue 為空」的廚師
         std::vector<int> idleEmpty;
         for (int i = 0; i < N; ++i) {
           if (!chefs[i].busy && chefs[i].q.empty()) {
@@ -508,15 +504,11 @@ void SimulateMultiQueues(Order* arr, int n, int N,
         int chosen = -1;
 
         if (idleEmpty.size() == 1) {
-          // Case 1：只有一位廚師閒置且佇列為空
           chosen = idleEmpty[0];
         } else if (idleEmpty.size() > 1) {
-          // Case 2：多位廚師閒置，選編號最小
           chosen = idleEmpty[0];
         } else {
-          // 沒有「閒置且 queue 空」的廚師，進入 Case 3 / Case 4
-
-          // 判斷是否所有 queue 都滿
+          // 沒有閒置+空佇列 → 看 queue 是否都滿
           bool allFull = true;
           for (int i = 0; i < N; ++i) {
             if (!chefs[i].q.full()) {
@@ -526,10 +518,10 @@ void SimulateMultiQueues(Order* arr, int n, int N,
           }
 
           if (allFull) {
-            // Case 4：所有佇列皆滿，且沒有閒置＋空 queue → 直接取消，CID = 0
+            // 所有 queue 都滿 → CID = 0 的 abort（顧客自己放棄）
             abortList.push_back({cur.OID, 0, 0, cur.arrival});
           } else {
-            // Case 3：至少有一個佇列未滿 → 選「最短佇列」，若有多個取編號最小
+            // 至少有一個 queue 未滿 → 選最短 queue，若多個取編號最小
             int bestLen = std::numeric_limits<int>::max();
             for (int i = 0; i < N; ++i) {
               if (!chefs[i].q.full()) {
@@ -546,17 +538,17 @@ void SimulateMultiQueues(Order* arr, int n, int N,
         if (chosen != -1) {
           Chef& c = chefs[chosen];
 
-          // 若該廚師目前閒置且 queue 也空，直接開始做（不用進 queue）
+          // 閒置且 queue 空 → 直接開始做
           if (!c.busy && c.q.empty()) {
             int startTime  = currentTime;
             int finishTime = startTime + cur.duration;
 
-            // 取出時就逾時
+            // 一開始就過期 → 直接 abort，時間 = startTime
             if (cur.timeout < startTime) {
               int delay = startTime - cur.arrival;
               abortList.push_back({cur.OID, chosen + 1, delay, startTime});
             } else {
-              // 時間上會 timeout 的，在開始時就先記錄
+              // 會 timeout → 開始時就寫入 timeoutList
               if (finishTime > cur.timeout) {
                 int delay = startTime - cur.arrival;
                 timeoutList.push_back({cur.OID, chosen + 1, delay, finishTime});
@@ -567,7 +559,7 @@ void SimulateMultiQueues(Order* arr, int n, int N,
               c.freeTime = finishTime;
             }
           } else {
-            // 其餘情況：丟進該廚師的 queue（Case 3）
+            // 其餘情況 → 丟到該廚師的 queue
             c.q.push(cur);
           }
         }
@@ -575,20 +567,19 @@ void SimulateMultiQueues(Order* arr, int n, int N,
         ++idx;
       }
     }
-    // ========= Case 3: nextArrival == nextFinish（同時發生） =========
+    // ===== Case 3: nextArrival == nextFinish（完成與到達同時發生） =====
     else {
-      currentTime = nextFinish;  // = nextArrival
+      currentTime = nextFinish;  // 也等於 nextArrival
 
       // 3-1. 先處理所有在 currentTime 完成的廚師
       for (int i = 0; i < N; ++i) {
         Chef& c = chefs[i];
         if (c.busy && c.freeTime == currentTime) {
-          // Timeout 在開始時已紀錄，因此此處只標記為 idle
           c.busy = false;
         }
       }
 
-      // 3-2. 廚師空出來後，先從各自 queue 取下一筆給他們
+      // 3-2. 完成後先從各自 queue 補下一筆
       for (int i = 0; i < N; ++i) {
         assignFromQueueToChef(i, currentTime);
       }
@@ -602,7 +593,6 @@ void SimulateMultiQueues(Order* arr, int n, int N,
           continue;
         }
 
-        // 與 Case 2 相同的分派邏輯
         std::vector<int> idleEmpty;
         for (int i = 0; i < N; ++i) {
           if (!chefs[i].busy && chefs[i].q.empty()) {
@@ -714,6 +704,7 @@ void SimulateMultiQueues(Order* arr, int n, int N,
 
   fout.close();
 }
+
 
 
 
