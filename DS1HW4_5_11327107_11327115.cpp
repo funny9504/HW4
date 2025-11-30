@@ -548,8 +548,12 @@ int main() {
     }
 
     std::stringstream ss(com);
-    if (!(ss >> command) || !(ss.eof())) {
-      // 非整數輸入或格式錯誤，直接結束程式
+    // 只要能讀出一個整數就當作合法指令，像 3.14 會被當成 3
+    if (!(ss >> command)) {
+      // 連一個整數都讀不到，直接結束程式
+      if (arr != nullptr) {
+        delete[] arr;
+      }
       return 0;
     }
 
@@ -562,7 +566,9 @@ int main() {
 
     if (command == 0) {
       // 結束前釋放動態陣列
-      delete[] arr;
+      if (arr != nullptr) {
+        delete[] arr;
+      }
       return 0;
     } 
     
