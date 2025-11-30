@@ -353,35 +353,35 @@ void SetOneFile(Order *arr, int n, std::string com) {
     fout.close();
 }
 
-void processChefUntil(int chefId, int limittime,
-                      Queue &q, int &idletime,
+void processChefUntil(int chefId, int limitTime,
+                      Queue &q, int &idleTime,
                       std::vector<Abortlist> &abortList,
                       std::vector<Timeout> &timeoutList) {
   
-  while (!q.empty() && idletime <= limittime) {
+  while (!q.empty() && idleTime <= limitTime) {
     Order cur;
-    q.pop(cur);
+    q.pop(cur); 
 
-    int starttime = std::max(idletime, cur.arrival);
+    int startTime = std::max(idleTime, cur.arrival);
 
-    if (cur.timeout < starttime) {
-      int delay = starttime - cur.arrival;
-      abortList.push_back({cur.OID, chefId + 1, delay, starttime});
-      idletime = starttime;
+    if (cur.timeout < startTime) {
+      int delay = startTime - cur.arrival;
+      abortList.push_back({cur.OID, chefId + 1, delay, startTime});
+      idleTime = startTime;
       continue;
     }
 
-    int finishtime = starttime + cur.duration;
-    idletime = finishtime;
+    int finishTime = startTime + cur.duration;
+    idleTime = finishTime;
 
-    if (cur.timeout < finishtime) {
-      int delay = starttime - cur.arrival;
-      timeoutList.push_back({cur.OID, chefId + 1, delay, finishtime});
+    if (cur.timeout < finishTime) {
+      int delay = startTime - cur.arrival;
+      timeoutList.push_back({cur.OID, chefId + 1, delay, finishTime});
     }
   }
 }
 
- void SimulateMultiQueues(Order* arr, int n, int N,
+void SimulateMultiQueues(Order* arr, int n, int N,
                          const std::string& prefix,
                          const std::string& com) {
   std::string outFile = prefix + com + ".txt";
@@ -402,27 +402,18 @@ void processChefUntil(int chefId, int limittime,
   }
 
   int idx = 0;
-  // 暫存閒置廚師 ID
   std::vector<int> idleChefs;
 
-  while (true) {
-    // 跳過無效訂單
+  // Pattern 1: 輸入階段 (處理所有從檔案讀入的訂單)
+  while (idx < n) {
     while (idx < n && (arr[idx].duration <= 0 || (arr[idx].arrival + arr[idx].duration) > arr[idx].timeout)) {
       idx++;
     }
+    if (idx >= n) break;
 
-    // 檢查結束
-    bool allEmpty = true;
-    for (int i = 0; i < N; ++i) {
-      if (!qs[i].empty()) { allEmpty = false; break; }
-    }
-    if (idx >= n && allEmpty) break;
+    int nextArrival = arr[idx].arrival;
 
-    int nextArrival;
-    if (idx < n) nextArrival = arr[idx].arrival;
-    else         nextArrival = std::numeric_limits<int>::max();
-
-    // Step A: 更新舊狀態 (落實 Rule 7)
+    // Step A: 更新舊狀態
     for (int i = 0; i < N; ++i) {
       if (!qs[i].empty()) {
         if (idle[i] <= nextArrival) {
@@ -431,16 +422,13 @@ void processChefUntil(int chefId, int limittime,
       }
     }
 
-    if (idx >= n) continue;
-
-    // Step B: 分配新訂單
+    // Step B: 分配新訂單 (SQF)
     while (idx < n && arr[idx].arrival == nextArrival) {
       Order &cur = arr[idx];
       if (cur.duration <= 0 || cur.arrival + cur.duration > cur.timeout) {
         idx++; continue;
       }
 
-      // 找閒置廚師 (定義：idleTime <= arrival 且 Queue 為空)
       idleChefs.clear();
       for (int i = 0; i < N; ++i) {
         if (idle[i] <= nextArrival && qs[i].empty()) {
@@ -450,28 +438,21 @@ void processChefUntil(int chefId, int limittime,
 
       int chosen = -1;
       if (idleChefs.size() >= 1) {
-        // Case 1 & 2: 有閒置，選編號最小
         chosen = idleChefs[0];
       } else {
-        // Case 3 & 4: 無閒置，檢查佇列
         bool allFull = true;
         for (int i = 0; i < N; ++i) {
           if (!qs[i].full()) { allFull = false; break; }
         }
 
         if (allFull) {
-          // Case 4: 全滿，拒絕
           abortList.push_back({cur.OID, 0, 0, cur.arrival});
         } else {
-          // Case 3: SQF (長度相同選編號小)
           int bestLen = std::numeric_limits<int>::max();
           for (int i = 0; i < N; i++) {
             if (!qs[i].full()) {
               int len = qs[i].size();
-              if (len < bestLen) {
-                bestLen = len;
-                chosen = i;
-              }
+              if (len < bestLen) { bestLen = len; chosen = i; }
             }
           }
         }
@@ -485,6 +466,77 @@ void processChefUntil(int chefId, int limittime,
       }
       idx++;
     }
+  }
+
+  // Pattern 2: 清空階段 (使用 Pop & Store 策略)
+  std::vector<Order> curOrder(N);
+  std::vector<bool> hasOrder(N, false);
+
+  while (true) {
+      // 1. 補充
+      bool anyBusy = false;
+      for (int i = 0; i < N; ++i) {
+          if (!hasOrder[i] && !qs[i].empty()) {
+              qs[i].pop(curOrder[i]); 
+              hasOrder[i] = true;
+          }
+          if (hasOrder[i]) anyBusy = true;
+      }
+
+      if (!anyBusy) break;
+
+      // 2. 比對：找出最早發生的事件
+      int minEventTime = std::numeric_limits<int>::max();
+      int targetChef = -1;
+
+      for (int i = 0; i < N; ++i) {
+          if (hasOrder[i]) {
+              Order &order = curOrder[i];
+              int start = std::max(idle[i], order.arrival);
+              int eventTime;
+              
+              // === 修改處：排序邏輯修正 ===
+              // 針對 Abort：事件時間 = start (因為會在 start 時間點中止)
+              // 針對 Timeout：為了保證順序 (如 102 優先於 105)，這裡使用 start 作為比較基準
+              // 這樣可以確保「開始處理時間」較早的任務優先被輸出
+              if (order.timeout < start) {
+                  eventTime = start; 
+              } else {
+                  // 原本是 start + duration，現在改用 start 進行比對
+                  eventTime = start; 
+              }
+
+              // 找最小值 (若 start 時間相同，選 CID 小的，這符合 102 (CID 1) 優先於 105 (CID 2) 的需求)
+              if (eventTime < minEventTime) {
+                  minEventTime = eventTime;
+                  targetChef = i;
+              }
+          }
+      }
+
+      // 3. 執行
+      if (targetChef != -1) {
+          Order &cur = curOrder[targetChef];
+          int start = std::max(idle[targetChef], cur.arrival);
+          
+          if (cur.timeout < start) {
+              // Abort Logic
+              int delay = start - cur.arrival;
+              abortList.push_back({cur.OID, targetChef + 1, delay, start});
+              idle[targetChef] = start;
+          } else {
+              // Timeout/Departure Logic
+              // 注意：雖然排序用 start，但這裡計算 finishTime 依然維持 start + duration
+              // 符合「Timeout 輸出不能變」的要求
+              int finishTime = start + cur.duration;
+              idle[targetChef] = finishTime;
+              if (cur.timeout < finishTime) {
+                  int delay = start - cur.arrival;
+                  timeoutList.push_back({cur.OID, targetChef + 1, delay, finishTime});
+              }
+          }
+          hasOrder[targetChef] = false;
+      }
   }
 
   // ===== 模擬結束，統計 Total Delay 與 Failure Percentage =====
@@ -529,8 +581,9 @@ void processChefUntil(int chefId, int limittime,
   fout << std::fixed << std::setprecision(2) << failurePercent << " %\n";
 
   fout.close();
+  delete[] idle;
+  delete[] qs;
 }
-
 
 int main() {
   Start();                
@@ -548,7 +601,17 @@ int main() {
     }
 
     std::stringstream ss(com);
-    if (!(ss >> command) || !(ss.eof()) || command < 0 || command > 4) {
+    // 只要能讀出一個整數就當作合法指令，像 3.14 會被當成 3
+    if (!(ss >> command)) {
+      // 連一個整數都讀不到，直接結束程式
+      if (arr != nullptr) {
+        delete[] arr;
+      }
+      return 0;
+    }
+
+    if (command < 0 || command > 4) {
+      // 是整數，但不在 [0, 4] 之內 → 印提示
       std::cout << std::endl << "Command does not exist!" << std::endl;
       Start();
       continue;
@@ -556,7 +619,9 @@ int main() {
 
     if (command == 0) {
       // 結束前釋放動態陣列
-      delete[] arr;
+      if (arr != nullptr) {
+        delete[] arr;
+      }
       return 0;
     } 
     
